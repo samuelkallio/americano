@@ -48,7 +48,10 @@
 
     async function addPlayer(){
       const name = prompt('Anna pelaajan nimi:');
-      if(!name) return;
+      if(!name || !name.trim()) {
+        showBanner('Anna kelvollinen nimi','error');
+        return;
+      }
       try {
         await window.addPlayerToDB({ name: name.trim(), wins:0, totalPoints:0, games:0, byeCount:0, permanentBreak:false });
         showBanner('Pelaaja lisätty','success');
