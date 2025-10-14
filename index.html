@@ -18,6 +18,25 @@
       <button onclick="location.href='rounds.html'">🎾 Kierros</button>
       <button onclick="location.href='results.html'">📜 Tulokset</button>
     </div>
+
+    <hr>
+
+    <div id="settingsArea" style="max-width:400px;margin:2em auto;">
+      <h2>Asetukset</h2>
+      <form id="settingsForm" onsubmit="return false;">
+        <label>
+          Kenttien lukumäärä:<br>
+          <input type="number" id="courtsInput" min="1" max="12" value="3" style="width:70px">
+        </label>
+        <br><br>
+        <label>
+          Voittopistemäärä:<br>
+          <input type="number" id="winPointsInput" min="1" max="30" value="11" style="width:70px">
+        </label>
+        <br><br>
+        <button id="saveSettingsBtn" type="button">Tallenna asetukset</button>
+      </form>
+    </div>
   </div>
 
   <footer>
@@ -31,6 +50,33 @@
     // Käynnistä live sync kun common.js on ladattu
     document.addEventListener('DOMContentLoaded', ()=>{
       if(window.startLiveSync) window.startLiveSync();
+
+      // Kun settings päivittyy, päivitä lomake
+      window.updateSettingsUI = function(settings) {
+        document.getElementById('courtsInput').value = settings?.courts || 3;
+        document.getElementById('winPointsInput').value = settings?.winPoints || 11;
+      };
+
+      // Päivitä lomakkeen arvot kun store.settings on saatavilla
+      if(window.store?.settings) {
+        window.updateSettingsUI(window.store.settings);
+      }
+
+      // Tallenna asetukset nappia painettaessa
+      document.getElementById('saveSettingsBtn').onclick = async function(){
+        const courts = Number(document.getElementById('courtsInput').value);
+        const winPoints = Number(document.getElementById('winPointsInput').value);
+        if(!courts || !winPoints) {
+          showBanner('Anna kelvolliset arvot','error');
+          return;
+        }
+        try {
+          await window.saveSettingsToDB({ courts, winPoints });
+          showBanner('Asetukset tallennettu','success');
+        } catch(e) {
+          showBanner('Tallennus epäonnistui','error');
+        }
+      };
     });
   </script>
 </body>
