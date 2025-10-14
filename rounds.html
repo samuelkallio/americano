@@ -7,29 +7,34 @@
   <link rel="stylesheet" href="style.css" />
   <script type="module" src="common.js"></script>
   <script>
-    // Muistetaan nykyinen kierros
+    // Nykyinen kierros
     let currentRound = null;
 
-    // Päivitä käynnissä oleva kierros (uusin, jossa tuloksia ei ole vielä syötetty)
+    // Näytä käynnissä oleva kierros (kaikki kentät, algoritmin peliparit, suurimmasta kenttä-numerosta alaspäin)
     function renderActiveRound() {
       const rounds = window.store?.rounds || [];
-      if (!rounds.length) {
-        document.getElementById('byesList').innerHTML = '';
-        document.getElementById('roundTable').innerHTML = '<div class="small">Ei kierrosta</div>';
-        currentRound = null;
-        return;
-      }
-      // Löydä käynnissä oleva kierros: uusin, jossa kaikissa scoreHome ja scoreAway ovat 0 (tai null)
+      // Löydä käynnissä oleva kierros: sellainen, jossa kaikki scoreHome ja scoreAway ovat 0/null
       currentRound = rounds.find(r =>
         r.courts && r.courts.every(c =>
           (c.scoreHome == null || c.scoreHome === 0) &&
           (c.scoreAway == null || c.scoreAway === 0)
         )
       );
-      // Jos ei löytynyt, näytä uusin
-      if (!currentRound) currentRound = rounds[0];
+      // Jos ei löydy, luo uusi kierros automaattisesti ja päivitä näkymä
+      if (!currentRound) {
+        if (window.autoCreateRound) {
+          window.autoCreateRound().then(() => {
+            // odota hetki että live sync tuo uuden kierroksen Firestoresta
+            setTimeout(renderActiveRound, 600);
+          });
+          // Näytä odotusviesti
+          document.getElementById('roundTable').innerHTML = '<div class="small">Luodaan uutta kierrosta...</div>';
+          document.getElementById('byesList').innerHTML = '';
+        }
+        return;
+      }
 
-      // Päivitä näkymä
+      // Piirrä kentät
       const tbl = document.getElementById('roundTable');
       const byesEl = document.getElementById('byesList');
       let html = '<tr><th>Kenttä</th><th>Koti</th><th>Koti pisteet</th><th>Vieras</th><th>Vieras pisteet</th></tr>';
@@ -61,8 +66,16 @@
       return false;
     }
 
+    // Tallennus: tallentaa tulokset ja luo uuden kierroksen, jos edellinen valmis
     async function saveResults() {
-      if (!currentRound) return showBanner('Ei kierrosta','error');
+      // Jos ei kierrosta, luodaan uusi
+      if (!currentRound) {
+        if (window.autoCreateRound) {
+          await window.autoCreateRound();
+          setTimeout(renderActiveRound, 600);
+        }
+        return;
+      }
       const wp = window.store?.settings?.winPoints || 11;
       for(const c of currentRound.courts || []) {
         const sH = Number(document.getElementById(`sH${c.courtNumber}`).value || 0);
@@ -81,8 +94,9 @@
         await window.saveRoundToDB(currentRound);
         await window.recomputeAndSavePlayers();
         showBanner('✅ Tulokset tallennettu', 'success');
+        currentRound = null;
         // Luo uusi kierros automaattisesti
-        setTimeout(()=>{ window.autoCreateRound(); }, 800);
+        setTimeout(renderActiveRound, 800);
       } catch(e) {
         console.error(e); showBanner('Tallennus epäonnistui','error');
       }
