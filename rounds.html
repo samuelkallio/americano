@@ -7,19 +7,42 @@
   <link rel="stylesheet" href="style.css" />
   <script type="module" src="common.js"></script>
   <script>
-    // updateRoundsUI callback
+    // Listaa kierrokset ja näytä valittu kierros
+    let selectedRoundId = null;
+
     window.updateRoundsUI = function(rounds){
-      // display latest active (most recent)
-      const last = (rounds || [])[0]; // sorted desc by date via query
-      if(last) renderRound(last);
+      const listEl = document.getElementById('roundsList');
+      if(!listEl) return;
+      let html = '';
+      if(!rounds || !rounds.length) {
+        html = '<div class="small">Ei kierroksia</div>';
+      } else {
+        rounds.forEach((r, idx) => {
+          html += `<button 
+            style="margin:3px;padding:5px 12px;${selectedRoundId===r.id?'background:#eee':''}" 
+            onclick="selectRound('${r.id}')">
+            ${new Date(r.date).toLocaleString()}${idx===0?' <b>(uusin)</b>':''}
+          </button>`;
+        });
+      }
+      listEl.innerHTML = html;
+
+      // Jos valittua kierrosta ei ole, näytä uusin
+      if(!selectedRoundId && rounds && rounds.length) {
+        selectedRoundId = rounds[0].id;
+      }
+      showRound(selectedRoundId);
+    };
+
+    window.selectRound = function(id){
+      selectedRoundId = id;
+      showRound(id);
     };
 
     window.updatePlayersUI = function(players){
-      // keep local players available for names resolving
       window.playersLocal = players;
-      // when players update we might want to re-render round
-      const rounds = window.store?.rounds || [];
-      if(rounds.length) renderRound(rounds[0]);
+      // kun pelaajat päivittyy, päivitä valittu kierros
+      if(selectedRoundId) showRound(selectedRoundId);
     };
 
     function getNameById(id){
@@ -27,10 +50,12 @@
       return p ? p.name : '?';
     }
 
-    function renderRound(round){
+    function showRound(roundId){
       const tbl = document.getElementById('roundTable');
       const byesEl = document.getElementById('byesList');
-      if(!round){ tbl.innerHTML = '<div class="small">Ei aktiivista kierrosta</div>'; byesEl.innerHTML=''; return; }
+      const round = (window.store?.rounds || []).find(r=>r.id===roundId);
+      document.getElementById('currentRoundId').value = roundId || '';
+      if(!round){ tbl.innerHTML = '<div class="small">Ei kierrosta valittuna</div>'; byesEl.innerHTML=''; return; }
       let html = '';
       (round.courts || []).slice().sort((a,b)=> b.courtNumber - a.courtNumber).forEach(c=>{
         const homeNames = (c.home||[]).map(getNameById).join(' & ');
@@ -44,8 +69,6 @@
       tbl.innerHTML = html;
       const byes = (round.byes||[]).map(id=>getNameById(id));
       byesEl.innerHTML = `<strong>Tauolla:</strong> ${byes.length ? byes.join(', ') : 'Ei ketään'}`;
-      // store active round id
-      document.getElementById('currentRoundId').value = round.id;
     }
 
     function validateScore(sH, sA, wp){
@@ -58,7 +81,7 @@
 
     async function saveResults(){
       const roundId = document.getElementById('currentRoundId').value;
-      if(!roundId) return showBanner('Ei aktiivista kierrosta','error');
+      if(!roundId) return showBanner('Ei kierrosta valittuna','error');
       // find round in store
       const round = (window.store?.rounds || []).find(r=>r.id===roundId);
       if(!round) return showBanner('Kierrosta ei löydy','error');
@@ -98,7 +121,8 @@
 <body>
   <div id="banner" class="banner"></div>
   <div class="container card">
-    <h1>Käynnissä oleva kierros</h1>
+    <h1>Kierrokset</h1>
+    <div id="roundsList" style="margin-bottom:18px"></div>
     <input type="hidden" id="currentRoundId" value="">
     <div id="byesList" class="small" style="margin-bottom:8px"></div>
     <table id="roundTable"></table>
