@@ -1,61 +1,27 @@
-/* style.css - kevyt, mobiiliystävällinen */
+/* style.css - kevyt ja mobiiliystävällinen */
 :root{
-  --bg:#f7f9fb; --card:#ffffff; --muted:#6b7280; --accent:#0ea5a4; --danger:#ef4444;
+  --bg:#f7fafc; --card:#fff; --muted:#6b7280; --accent:#0ea5a4; --danger:#ef4444;
   --banner-success:#16a34a; --banner-error:#dc2626;
 }
 *{box-sizing:border-box}
-body{
-  margin:0;
-  font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-  background:var(--bg);
-  color:#111827;
-  padding-bottom:76px; /* footer */
-}
-.container{
-  max-width:920px;
-  margin:12px auto;
-  padding:12px;
-}
-h1,h2{margin:8px 0 14px; text-align:center;}
-table{width:100%; border-collapse:collapse; margin-bottom:12px; background:var(--card); border-radius:8px; overflow:hidden;}
-th,td{padding:10px 8px; border-bottom:1px solid #eef2f7; text-align:left; font-size:14px;}
-th{background:#f1f5f9; color:var(--muted); font-weight:600;}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:#0f172a;padding-bottom:80px;}
+.container{max-width:920px;margin:12px auto;padding:12px;}
+h1,h2{margin:8px 0 14px;text-align:center;}
+table{width:100%;border-collapse:collapse;margin-bottom:12px;background:var(--card);border-radius:8px;overflow:hidden;}
+th,td{padding:10px 8px;border-bottom:1px solid #eef2f7;text-align:left;font-size:14px;}
+th{background:#f1f5f9;color:var(--muted);font-weight:700;}
 tr:last-child td{border-bottom:0;}
-button{background:var(--accent); color:white; border:0; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600;}
+button{background:var(--accent);color:white;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700;}
 button.alt{background:#6b7280;}
-button.ghost{background:transparent; color:var(--muted); border:1px solid rgba(0,0,0,0.06);}
-.small{font-size:13px; color:var(--muted);}
-.footer-space{height:72px;}
-footer{
-  position:fixed; left:0; right:0; bottom:0; height:72px; background:#fff; border-top:1px solid #e6eef5;
-  display:flex; gap:6px; align-items:center; justify-content:space-around; padding:8px 12px; z-index:50;
-}
-footer button{background:none; color:var(--muted); font-size:16px; font-weight:600; border-radius:6px; padding:8px 10px;}
-footer button.active{color:var(--accent); background:rgba(14,165,164,0.08);}
-
-/* Card like boxes */
-.card{background:var(--card); border-radius:10px; padding:12px; box-shadow:0 6px 18px rgba(2,6,23,0.03); margin-bottom:12px}
-
-/* Editable name cell */
-td[contenteditable]{outline:none;}
-
-/* Court / round styles */
-.court{border:1px solid #eef2f7; border-radius:8px; padding:10px; margin-bottom:8px; background:var(--card);}
-.team{display:flex; justify-content:space-between; gap:8px; align-items:center; margin:6px 0;}
-
-/* Banner */
-.banner{
-  position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:9999;
-  padding:10px 16px; border-radius:8px; color:#fff; font-weight:700; box-shadow:0 6px 24px rgba(2,6,23,0.12);
-  opacity:0; transition:opacity .35s;
-}
-.banner.show{opacity:1;}
+button.small{padding:6px 8px;font-size:13px;}
+.footer-space{height:80px;}
+footer{position:fixed;left:0;right:0;bottom:0;height:72px;background:#fff;border-top:1px solid #e6eef5;display:flex;gap:6px;align-items:center;justify-content:space-around;padding:8px 12px;z-index:50;}
+footer button{background:none;color:var(--muted);font-size:16px;font-weight:700;border-radius:6px;padding:8px 10px;}
+footer button.active{color:var(--accent);background:rgba(14,165,164,0.06);}
+.card{background:var(--card);border-radius:10px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.03);margin-bottom:12px}
+.court{border:1px solid #eef2f7;border-radius:8px;padding:10px;margin-bottom:8px;background:var(--card);}
+.team{display:flex;justify-content:space-between;gap:8px;align-items:center;margin:6px 0;}
+.banner{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;padding:10px 16px;border-radius:8px;color:#fff;font-weight:700;box-shadow:0 6px 24px rgba(2,6,23,0.12);opacity:1;display:none;}
 .banner.success{background:var(--banner-success);}
 .banner.error{background:var(--banner-error);}
-
-/* small screens */
-@media (max-width:720px){
-  th,td{font-size:13px; padding:8px;}
-  footer button{font-size:14px;}
-  .team{flex-direction:column; align-items:flex-start;}
-}
+@media (max-width:720px){th,td{font-size:13px;padding:8px;}footer button{font-size:14px;} .team{flex-direction:column;align-items:flex-start;}}

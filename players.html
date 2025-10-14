@@ -2,81 +2,96 @@
 <html lang="fi">
 <head>
   <meta charset="utf-8" />
-  <title>Pelaajat — Americano</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pelaajat — Americano</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="common.js" defer></script>
-  <script defer>
-    function renderPlayers(){
-      recomputePlayersFromRounds();
-      const d = getData();
+  <script type="module" src="common.js"></script>
+  <script>
+    // UI-callback jota common.js kutsuu live päivityksissä
+    window.updatePlayersUI = function(players){
       const tbl = document.getElementById('playerTable');
-      const players = (d.players || []).slice().sort((a,b)=> (b.wins||0)-(a.wins||0) || (b.totalPoints||0)-(a.totalPoints||0));
+      // sort descending by wins then points
+      players = (players || []).slice().sort((a,b)=>(b.wins||0)-(a.wins||0) || (b.totalPoints||0)-(a.totalPoints||0));
       let html = `<tr><th>Nimi</th><th>Voitot</th><th>Pisteet</th><th>Pelit</th><th>Tauot</th><th>Pysyvä tauko</th></tr>`;
       players.forEach(p=>{
         const style = p.permanentBreak ? 'opacity:0.6;text-decoration:line-through' : '';
         html += `<tr style="${style}">
-          <td contenteditable="true" onblur="updateName('${p.id}', this.innerText)">${escapeHtml(p.name)}</td>
+          <td contenteditable="true" onblur="changeName('${p.id}', this.innerText)">${escapeHtml(p.name||'')}</td>
           <td>${p.wins||0}</td>
           <td>${p.totalPoints||0}</td>
           <td>${p.games||0}</td>
           <td>${p.byeCount||0}</td>
-          <td style="text-align:center"><input type="checkbox" ${p.permanentBreak ? 'checked' : ''} onchange="togglePermanentBreak('${p.id}', this.checked)"></td>
+          <td style="text-align:center"><input type="checkbox" ${p.permanentBreak ? 'checked' : ''} onchange="togglePermanent('${p.id}', this.checked)"></td>
         </tr>`;
       });
       tbl.innerHTML = html;
-    }
+    };
+
     function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
-    function updateName(id, newName){
-      const d = getData(); const p = d.players.find(x=>x.id===id);
-      if(p){ p.name = newName.trim() || p.name; saveData(d); showBanner('Nimi tallennettu','success'); }
+
+    async function changeName(id, newName){
+      try {
+        await window.updatePlayerInDB(id, { name: newName.trim() || 'Tuntematon' });
+        showBanner('Nimi päivitetty','success');
+      } catch(e){ showBanner('Nimen tallennus epäonnistui','error'); console.error(e); }
     }
-    function togglePermanentBreak(id, checked){
-      const d = getData(); const p = d.players.find(x=>x.id===id);
-      if(!p) return;
-      p.permanentBreak = !!checked;
-      saveData(d);
-      showBanner(p.permanentBreak ? 'Pelaaja merkitty tauolle' : 'Pelaaja otettu tauolta', 'success');
-      renderPlayers();
+
+    async function togglePermanent(id, checked){
+      try {
+        await window.updatePlayerInDB(id, { permanentBreak: !!checked });
+        showBanner(checked ? 'Pelaaja tauolla' : 'Pelaaja takaisin peleihin','success');
+      } catch(e){ showBanner('Virhe','error'); }
     }
-    function addPlayer(){
+
+    // Lisäys / poisto
+    async function addPlayer(){
       const name = prompt('Anna pelaajan nimi:');
       if(!name) return;
-      const d = getData();
-      d.players = d.players || [];
-      d.players.push({ id: makeId(), name: name.trim(), wins:0, totalPoints:0, byeCount:0, games:0, permanentBreak:false });
-      saveData(d);
-      renderPlayers();
-      showBanner('Pelaaja lisätty','success');
+      const id = makeId();
+      try {
+        await window.addPlayerToDB({ id, name: name.trim(), wins:0, totalPoints:0, games:0, byeCount:0, permanentBreak:false });
+        showBanner('Pelaaja lisätty','success');
+      } catch(e){ showBanner('Virhe lisäämisessä','error'); console.error(e); }
     }
-    function clearAll(){
-      if(!confirm('Poistetaanko kaikki pelaajat ja kierrokset (ei voi perua)?')) return;
-      const d = getData();
-      d.players = []; d.rounds = [];
-      saveData(d);
-      renderPlayers();
-      showBanner('Kaikki pelaajat ja kierrokset poistettu','success');
+
+    async function clearAll(){
+      if(!confirm('Poistetaanko kaikki pelaajat ja kierrokset (varoitus: tämä poistaa pysyvästi pilvitiedot)?')) return;
+      // Poistetaan kaikki Firestore documents (players + rounds) – varovaisuus: esto jos ei haluta.
+      try {
+        // fetch current players and rounds from store (local updated by live sync)
+        const players = window.store?.players || [];
+        const rounds = window.store?.rounds || [];
+        for(const p of players) await window.deletePlayerFromDB(p.id);
+        for(const r of rounds) await window.deleteRoundFromDB(r.id);
+        showBanner('Kaikki poistettu','success');
+      } catch(e){
+        showBanner('Poisto epäonnistui','error'); console.error(e);
+      }
     }
-    document.addEventListener('DOMContentLoaded', renderPlayers);
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      if(window.startLiveSync) window.startLiveSync();
+      // render any existing local copy immediately
+      if(window.store && window.store.players) updatePlayersUI(window.store.players);
+    });
   </script>
 </head>
 <body>
-  <div id="banner" class="banner" style="display:none"></div>
+  <div id="banner" class="banner"></div>
   <div class="container card">
     <h1>Pelaajat</h1>
-    <div class="small" style="text-align:center;margin-bottom:8px;">Muokkaa nimeä napauttamalla nimeä (tallenna poistumalla kentästä).</div>
     <table id="playerTable"></table>
     <div style="text-align:center;margin-top:8px">
       <button onclick="addPlayer()">➕ Lisää pelaaja</button>
-      <button class="alt" onclick="clearAll()">🗑️ Poista kaikki pelaajat ja tulokset</button>
+      <button class="alt" onclick="clearAll()">🗑️ Poista kaikki (pilvi)</button>
     </div>
   </div>
 
   <footer>
-    <button onclick="navigate('index.html')">⚙️</button>
-    <button onclick="navigate('players.html')" class="active">👥 Pelaajat</button>
-    <button onclick="navigate('rounds.html')">🎾 Kierrokset</button>
-    <button onclick="navigate('results.html')">📜 Tulokset</button>
+    <button onclick="location.href='index.html'">⚙️</button>
+    <button onclick="location.href='players.html'" class="active">👥</button>
+    <button onclick="location.href='rounds.html'">🎾</button>
+    <button onclick="location.href='results.html'">📜</button>
   </footer>
 </body>
 </html>
