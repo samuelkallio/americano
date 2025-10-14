@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8" />
+  <title>Pelaajat — Americano</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="common.js" defer></script>
+  <script defer>
+    function renderPlayers(){
+      recomputePlayersFromRounds();
+      const d = getData();
+      const tbl = document.getElementById('playerTable');
+      const players = (d.players || []).slice().sort((a,b)=> (b.wins||0)-(a.wins||0) || (b.totalPoints||0)-(a.totalPoints||0));
+      let html = `<tr><th>Nimi</th><th>Voitot</th><th>Pisteet</th><th>Pelit</th><th>Tauot</th><th>Pysyvä tauko</th></tr>`;
+      players.forEach(p=>{
+        const style = p.permanentBreak ? 'opacity:0.6;text-decoration:line-through' : '';
+        html += `<tr style="${style}">
+          <td contenteditable="true" onblur="updateName('${p.id}', this.innerText)">${escapeHtml(p.name)}</td>
+          <td>${p.wins||0}</td>
+          <td>${p.totalPoints||0}</td>
+          <td>${p.games||0}</td>
+          <td>${p.byeCount||0}</td>
+          <td style="text-align:center"><input type="checkbox" ${p.permanentBreak ? 'checked' : ''} onchange="togglePermanentBreak('${p.id}', this.checked)"></td>
+        </tr>`;
+      });
+      tbl.innerHTML = html;
+    }
+    function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+    function updateName(id, newName){
+      const d = getData(); const p = d.players.find(x=>x.id===id);
+      if(p){ p.name = newName.trim() || p.name; saveData(d); showBanner('Nimi tallennettu','success'); }
+    }
+    function togglePermanentBreak(id, checked){
+      const d = getData(); const p = d.players.find(x=>x.id===id);
+      if(!p) return;
+      p.permanentBreak = !!checked;
+      saveData(d);
+      showBanner(p.permanentBreak ? 'Pelaaja merkitty tauolle' : 'Pelaaja otettu tauolta', 'success');
+      renderPlayers();
+    }
+    function addPlayer(){
+      const name = prompt('Anna pelaajan nimi:');
+      if(!name) return;
+      const d = getData();
+      d.players = d.players || [];
+      d.players.push({ id: makeId(), name: name.trim(), wins:0, totalPoints:0, byeCount:0, games:0, permanentBreak:false });
+      saveData(d);
+      renderPlayers();
+      showBanner('Pelaaja lisätty','success');
+    }
+    function clearAll(){
+      if(!confirm('Poistetaanko kaikki pelaajat ja kierrokset (ei voi perua)?')) return;
+      const d = getData();
+      d.players = []; d.rounds = [];
+      saveData(d);
+      renderPlayers();
+      showBanner('Kaikki pelaajat ja kierrokset poistettu','success');
+    }
+    document.addEventListener('DOMContentLoaded', renderPlayers);
+  </script>
+</head>
+<body>
+  <div id="banner" class="banner" style="display:none"></div>
+  <div class="container card">
+    <h1>Pelaajat</h1>
+    <div class="small" style="text-align:center;margin-bottom:8px;">Muokkaa nimeä napauttamalla nimeä (tallenna poistumalla kentästä).</div>
+    <table id="playerTable"></table>
+    <div style="text-align:center;margin-top:8px">
+      <button onclick="addPlayer()">➕ Lisää pelaaja</button>
+      <button class="alt" onclick="clearAll()">🗑️ Poista kaikki pelaajat ja tulokset</button>
+    </div>
+  </div>
+
+  <footer>
+    <button onclick="navigate('index.html')">⚙️</button>
+    <button onclick="navigate('players.html')" class="active">👥 Pelaajat</button>
+    <button onclick="navigate('rounds.html')">🎾 Kierrokset</button>
+    <button onclick="navigate('results.html')">📜 Tulokset</button>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8" />
+  <title>Tulokset — Americano</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="common.js" defer></script>
+  <script defer>
+    let editingId = null;
+    function renderResults(){
+      recomputePlayersFromRounds();
+      const d = getData();
+      const out = document.getElementById('resultsArea');
+      const rounds = (d.rounds || []).slice().reverse(); // newest first
+      if(rounds.length === 0){ out.innerHTML = '<div class="small">Ei tallennettuja kierroksia.</div>'; return; }
+      let html = '';
+      rounds.forEach(r=>{
+        html += `<div class="card" style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><strong>Kierros:</strong> ${new Date(r.date).toLocaleString()}</div>
+            <div>${editingId === r.id ? '<button class="alt" onclick="cancelEdit()">Peruuta</button>' : `<button onclick="startEdit('${r.id}')">✏️ Muokkaa</button>`}</div>
+          </div>
+          <table><thead><tr><th>Kenttä</th><th>Koti</th><th>Vieras</th></tr></thead><tbody>`;
+        (r.courts || []).slice().sort((a,b)=> b.courtNumber - a.courtNumber).forEach(c=>{
+          const homeNames = getPlayerNames(c.home);
+          const awayNames = getPlayerNames(c.away);
+          const aScore = c.scoreHome != null ? c.scoreHome : '';
+          const bScore = c.scoreAway != null ? c.scoreAway : '';
+          if(editingId === r.id){
+            html += `<tr>
+              <td>${c.courtNumber}</td>
+              <td>${homeNames} <input id="eH_${r.id}_${c.courtNumber}" type="number" value="${aScore}" style="width:80px"></td>
+              <td>${awayNames} <input id="eA_${r.id}_${c.courtNumber}" type="number" value="${bScore}" style="width:80px"></td>
+            </tr>`;
+          } else {
+            html += `<tr>
+              <td>${c.courtNumber}</td>
+              <td>${homeNames} (${aScore})</td>
+              <td>${awayNames} (${bScore})</td>
+            </tr>`;
+          }
+        });
+        html += `</tbody></table>`;
+        if(editingId === r.id){
+          html += `<div style="text-align:right;margin-top:8px"><button onclick="saveEdit('${r.id}')">💾 Tallenna</button></div>`;
+        }
+        html += `</div>`;
+      });
+      out.innerHTML = html;
+    }
+
+    function startEdit(id){ editingId = id; renderResults(); }
+    function cancelEdit(){ editingId = null; renderResults(); }
+
+    function saveEdit(id){
+      const d = getData();
+      const idx = d.rounds.findIndex(r => String(r.id) === String(id));
+      if(idx === -1) return showBanner('Kierrosta ei löydy','error');
+      const r = d.rounds[idx];
+      // validate and write scores
+      const wp = d.settings?.winPoints || 11;
+      for(const c of r.courts){
+        const eH = document.getElementById(`eH_${id}_${c.courtNumber}`);
+        const eA = document.getElementById(`eA_${id}_${c.courtNumber}`);
+        const sH = Number(eH?.value || 0);
+        const sA = Number(eA?.value || 0);
+        if(! ( (sH === wp && sH > sA) || (sA === wp && sA > sH) ) ){
+          showBanner(`Virhe kenttä ${c.courtNumber}: voittajan pistemäärän täytyy olla ${wp} ja suurempi kuin vastustaja.`,'error');
+          return;
+        }
+      }
+      // apply
+      for(const c of r.courts){
+        const sH = Number(document.getElementById(`eH_${id}_${c.courtNumber}`).value || 0);
+        const sA = Number(document.getElementById(`eA_${id}_${c.courtNumber}`).value || 0);
+        c.scoreHome = sH; c.scoreAway = sA;
+      }
+      saveData(d);
+      recomputePlayersFromRounds();
+      editingId = null;
+      showBanner('Muutokset tallennettu','success');
+      renderResults();
+    }
+
+    document.addEventListener('DOMContentLoaded', renderResults);
+  </script>
+</head>
+<body>
+  <div id="banner" class="banner" style="display:none"></div>
+  <div class="container">
+    <h1>Päättyneet kierrokset</h1>
+    <div id="resultsArea"></div>
+  </div>
+
+  <footer>
+    <button onclick="navigate('index.html')">⚙️</button>
+    <button onclick="navigate('players.html')">👥</button>
+    <button onclick="navigate('rounds.html')">🎾</button>
+    <button onclick="navigate('results.html')" class="active">📜</button>
+  </footer>
+</body>
+</html>

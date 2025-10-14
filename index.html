@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8" />
+  <title>Asetukset — Americano</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="common.js" defer></script>
+  <script defer>
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const d = getData();
+      document.getElementById('courts').value = d.settings?.courts ?? 3;
+      document.getElementById('winPoints').value = d.settings?.winPoints ?? 11;
+    });
+    function saveSettings(){
+      const courts = Math.max(1, parseInt(document.getElementById('courts').value) || 3);
+      const winPoints = Math.max(1, parseInt(document.getElementById('winPoints').value) || 11);
+      const d = getData();
+      d.settings = { courts, winPoints };
+      saveData(d);
+      showBanner('Asetukset tallennettu', 'success');
+    }
+  </script>
+</head>
+<body>
+  <div id="banner" class="banner" style="display:none"></div>
+  <div class="container card">
+    <h1>Asetukset</h1>
+    <div style="max-width:420px;margin:auto">
+      <label class="small">Kenttien lukumäärä</label>
+      <input id="courts" type="number" min="1" max="10" value="3" />
+      <label class="small">Erän voittopistemäärä</label>
+      <input id="winPoints" type="number" min="1" max="99" value="11" />
+      <div style="text-align:center; margin-top:12px;">
+        <button onclick="saveSettings()">💾 Tallenna asetukset</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <button class="active" onclick="navigate('index.html')">⚙️ Asetukset</button>
+    <button onclick="navigate('players.html')">👥 Pelaajat</button>
+    <button onclick="navigate('rounds.html')">🎾 Kierrokset</button>
+    <button onclick="navigate('results.html')">📜 Tulokset</button>
+  </footer>
+</body>
+</html>

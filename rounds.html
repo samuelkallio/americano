@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8" />
+  <title>Kierros — Americano</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="common.js" defer></script>
+  <script defer>
+    function prepareAndRenderRound(){
+      // Build a round if none exists yet or last round has scores (so we always have an active fresh round)
+      const d = getData();
+      const settings = d.settings || { courts:3, winPoints:11 };
+      // Filter out permanently paused players
+      const playersAll = (d.players || []).slice();
+      const activePlayers = playersAll.filter(p => !p.permanentBreak);
+      // Sort for pairing: best first by wins and points
+      activePlayers.sort((a,b)=> (b.wins||0)-(a.wins||0) || (b.totalPoints||0)-(a.totalPoints||0));
+      // Determine bye count: if more than courts*4 players then extras are byes; else 0
+      const courts = Math.max(1, settings.courts || 3);
+      const maxPlaying = courts * 4;
+      const byesCount = Math.max(0, activePlayers.length - maxPlaying);
+      // Choose byes fairly (fewest byeCount + weaker)
+      const perhapsForBye = activePlayers.slice().sort((a,b)=> (a.byeCount||0)-(b.byeCount||0) || (a.wins||0)-(b.wins||0) || (a.totalPoints||0)-(b.totalPoints||0));
+      const byes = perhapsForBye.slice(0, byesCount).map(p=>p.id);
+
+      // availPlayers sorted best-first excluding byes
+      const avail = activePlayers.filter(p => !byes.includes(p.id));
+
+      // Build pairs avoiding past partners
+      const pastPartners = getPastPartnerSets(d.rounds);
+      const pairs = makeAmericanoPairs(avail, pastPartners); // pairs are [p, partner] arrays with player objects
+
+      // pairs -> teams array (pairs[0] etc.) Now we need to create courts: 2 pairs per court
+      const courtsArr = [];
+      // Sort pairs best-first (pair strength = sum wins + totalPoints maybe); we have avail sorted, so pairs preserve relative order
+      // Place strongest pairs to highest courts (largest court number)
+      for(let i=0;i<Math.floor(pairs.length/2);i++){
+        const pairIndexA = i*2; const pairIndexB = i*2+1;
+        const A = pairs[pairIndexA]; const B = pairs[pairIndexB];
+        if(!A || !B) continue;
+        // compute courtNumber mapping: highest court number for i=0
+        const courtNumber = courts - i;
+        courtsArr.push({
+          courtNumber,
+          home: [A[0].id, A[1].id],
+          away: [B[0].id, B[1].id],
+          scoreHome: 0, scoreAway: 0
+        });
+      }
+
+      // Create round and push to data
+      const round = { id: makeId(), date: new Date().toISOString(), courts: courtsArr, byes };
+      d.rounds = d.rounds || [];
+      // If last round exists and still has no scores, we prefer to show that instead of creating new duplicate; but per requirement we create automatically only if not present
+      const last = d.rounds[d.rounds.length-1];
+      if(!last || (last && last.courts && last.courts.every(c => (c.scoreHome||0)===0 && (c.scoreAway||0)===0))){
+        // push only if no active empty last
+        d.rounds.push(round);
+        saveData(d);
+        renderRound(round);
+      } else {
+        // There is an older saved round; create fresh anyway and render the newly pushed
+        d.rounds.push(round);
+        saveData(d);
+        renderRound(round);
+      }
+    }
+
+    function renderRound(round){
+      const d = getData();
+      const settings = d.settings || { winPoints:11 };
+      const tbl = document.getElementById('roundTable');
+      const byesEl = document.getElementById('byesList');
+      if(!round){ tbl.innerHTML = '<div class="small">Ei kierrosta</div>'; return; }
+      // Build table rows
+      let html = '';
+      // sort courts by courtNumber desc so larger numbers (hardest) appear first
+      const sortedCourts = (round.courts||[]).slice().sort((a,b)=> b.courtNumber - a.courtNumber);
+      sortedCourts.forEach(c=>{
+        const homeNames = getPlayerNames(c.home);
+        const awayNames = getPlayerNames(c.away);
+        html += `<tr>
+          <td style="width:18%"><strong>Kenttä ${c.courtNumber}</strong></td>
+          <td>${homeNames} <input type="number" id="sH${c.courtNumber}" min="0" max="${settings.winPoints}" value="${c.scoreHome||0}" style="width:90px"></td>
+          <td>${awayNames} <input type="number" id="sA${c.courtNumber}" min="0" max="${settings.winPoints}" value="${c.scoreAway||0}" style="width:90px"></td>
+        </tr>`;
+      });
+      tbl.innerHTML = html;
+      // Byes display (Tauolla)
+      const names = (round.byes || []).map(id => (d.players.find(p=>p.id===id) || {name:'?'}).name);
+      byesEl.innerHTML = `<strong>Tauolla:</strong> ${names.length ? names.join(', ') : 'Ei ketään'}`;
+    }
+
+    function validateScoreForCourt(sH, sA, wp){
+      // Valid only if one score equals wp and the other is < wp. Also scores must be between 0 and wp.
+      if(Number.isNaN(sH) || Number.isNaN(sA)) return false;
+      if(sH < 0 || sA < 0) return false;
+      if(sH > wp || sA > wp) return false;
+      // one must equal wp and be greater than other
+      if((sH === wp && sH > sA) || (sA === wp && sA > sH)) return true;
+      return false;
+    }
+
+    function saveResults(){
+      const d = getData();
+      const wp = d.settings?.winPoints || 11;
+      if(!d.rounds || d.rounds.length === 0) { showBanner('Ei tallennettavaa kierrosta', 'error'); return; }
+      const round = d.rounds[d.rounds.length-1];
+      // Validate all courts before applying
+      for(const c of round.courts){
+        const sH = Number(document.getElementById(`sH${c.courtNumber}`).value || 0);
+        const sA = Number(document.getElementById(`sA${c.courtNumber}`).value || 0);
+        if(!validateScoreForCourt(sH, sA, wp)){
+          showBanner(`Virhe kenttä ${c.courtNumber}: tulosten tulee olla 0..${wp} ja voittajan pistemäärä täytyy olla ${wp} (voittaja > vastustaja).`, 'error');
+          return;
+        }
+      }
+      // All valid -> apply
+      for(const c of round.courts){
+        const sH = Number(document.getElementById(`sH${c.courtNumber}`).value || 0);
+        const sA = Number(document.getElementById(`sA${c.courtNumber}`).value || 0);
+        c.scoreHome = sH; c.scoreAway = sA;
+        // update stats (we'll recompute from scratch for consistency)
+      }
+      // Update byes: increment byeCount for those who had bye this round
+      // We'll store byes already in round.byes; recompute handles counts.
+      saveData(d);
+      recomputePlayersFromRounds();
+      showBanner('✅ Tulokset tallennettu onnistuneesti!', 'success');
+      // After saving, automatically prepare a new round after short delay
+      setTimeout(()=>{ prepareAndRenderRound(); }, 900);
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      // If no rounds or last round has scores (i.e. completed), create new round automatically
+      const d = getData();
+      if(!d.rounds || d.rounds.length === 0) {
+        prepareAndRenderRound();
+      } else {
+        const last = d.rounds[d.rounds.length-1];
+        // If last has all scores 0 -> render it, otherwise create new round
+        const allZero = last.courts && last.courts.every(c => Number(c.scoreHome||0) === 0 && Number(c.scoreAway||0) === 0);
+        if(allZero){
+          renderRound(last);
+        } else {
+          prepareAndRenderRound();
+        }
+      }
+    });
+  </script>
+</head>
+<body>
+  <div id="banner" class="banner" style="display:none"></div>
+  <div class="container card">
+    <h1>Käynnissä oleva kierros</h1>
+    <div id="byesList" class="small" style="margin-bottom:8px"></div>
+    <table id="roundTable"></table>
+    <div style="text-align:center;margin-top:8px">
+      <button onclick="saveResults()">💾 Tallenna tulokset</button>
+    </div>
+  </div>
+
+  <footer>
+    <button onclick="navigate('index.html')">⚙️</button>
+    <button onclick="navigate('players.html')">👥</button>
+    <button onclick="navigate('rounds.html')" class="active">🎾</button>
+    <button onclick="navigate('results.html')">📜</button>
+  </footer>
+</body>
+</html>
