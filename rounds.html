@@ -7,12 +7,12 @@
   <link rel="stylesheet" href="style.css" />
   <script type="module" src="common.js"></script>
   <script>
-    // Listaa kierrokset ja näytä valittu kierros
+    // Muistetaan valittu kierros
     let selectedRoundId = null;
 
+    // Päivitä kierroslista ja näytä valittu kierros
     window.updateRoundsUI = function(rounds){
       const listEl = document.getElementById('roundsList');
-      if(!listEl) return;
       let html = '';
       if(!rounds || !rounds.length) {
         html = '<div class="small">Ei kierroksia</div>';
@@ -34,36 +34,43 @@
       showRound(selectedRoundId);
     };
 
+    // Valitse kierros
     window.selectRound = function(id){
       selectedRoundId = id;
       showRound(id);
     };
 
+    // Pelaajien päivitys: nimet kenttiin
     window.updatePlayersUI = function(players){
       window.playersLocal = players;
-      // kun pelaajat päivittyy, päivitä valittu kierros
       if(selectedRoundId) showRound(selectedRoundId);
     };
 
+    // Palauta pelaajan nimi id:llä
     function getNameById(id){
       const p = (window.playersLocal||[]).find(x=>x.id===id);
       return p ? p.name : '?';
     }
 
+    // Näytä kierroksen kentät algoritmin mukaisesti
     function showRound(roundId){
       const tbl = document.getElementById('roundTable');
       const byesEl = document.getElementById('byesList');
       const round = (window.store?.rounds || []).find(r=>r.id===roundId);
       document.getElementById('currentRoundId').value = roundId || '';
       if(!round){ tbl.innerHTML = '<div class="small">Ei kierrosta valittuna</div>'; byesEl.innerHTML=''; return; }
-      let html = '';
+
+      // Järjestetään kentät suurimmasta pienimpään courtNumber
+      let html = '<tr><th>Kenttä</th><th>Koti</th><th>Koti pisteet</th><th>Vieras</th><th>Vieras pisteet</th></tr>';
       (round.courts || []).slice().sort((a,b)=> b.courtNumber - a.courtNumber).forEach(c=>{
         const homeNames = (c.home||[]).map(getNameById).join(' & ');
         const awayNames = (c.away||[]).map(getNameById).join(' & ');
         html += `<tr>
           <td><strong>K${c.courtNumber}</strong></td>
-          <td>${homeNames} <input type="number" id="sH${c.courtNumber}" min="0" max="${window.store?.settings?.winPoints||11}" value="${c.scoreHome||0}" style="width:90px"></td>
-          <td>${awayNames} <input type="number" id="sA${c.courtNumber}" min="0" max="${window.store?.settings?.winPoints||11}" value="${c.scoreAway||0}" style="width:90px"></td>
+          <td>${homeNames}</td>
+          <td><input type="number" id="sH${c.courtNumber}" min="0" max="${window.store?.settings?.winPoints||11}" value="${c.scoreHome||0}" style="width:70px"></td>
+          <td>${awayNames}</td>
+          <td><input type="number" id="sA${c.courtNumber}" min="0" max="${window.store?.settings?.winPoints||11}" value="${c.scoreAway||0}" style="width:70px"></td>
         </tr>`;
       });
       tbl.innerHTML = html;
@@ -74,7 +81,7 @@
     function validateScore(sH, sA, wp){
       if(Number.isNaN(sH) || Number.isNaN(sA)) return false;
       if(sH < 0 || sA < 0 || sH > wp || sA > wp) return false;
-      // one must equal wp and be greater than other
+      // Yksi tulos on oltava voittopistemäärä ja oltava suurempi kuin toinen
       if((sH === wp && sH > sA) || (sA === wp && sA > sH)) return true;
       return false;
     }
@@ -82,11 +89,9 @@
     async function saveResults(){
       const roundId = document.getElementById('currentRoundId').value;
       if(!roundId) return showBanner('Ei kierrosta valittuna','error');
-      // find round in store
       const round = (window.store?.rounds || []).find(r=>r.id===roundId);
       if(!round) return showBanner('Kierrosta ei löydy','error');
       const wp = window.store?.settings?.winPoints || 11;
-      // validate all courts first
       for(const c of round.courts || []){
         const sH = Number(document.getElementById(`sH${c.courtNumber}`).value || 0);
         const sA = Number(document.getElementById(`sA${c.courtNumber}`).value || 0);
@@ -94,17 +99,14 @@
           return showBanner(`Virhe kenttä ${c.courtNumber}: tarkista tulokset`, 'error');
         }
       }
-      // apply scores and save round
       for(const c of round.courts || []){
         c.scoreHome = Number(document.getElementById(`sH${c.courtNumber}`).value || 0);
         c.scoreAway = Number(document.getElementById(`sA${c.courtNumber}`).value || 0);
       }
       try {
         await window.saveRoundToDB(round);
-        // recompute players on server
         await window.recomputeAndSavePlayers();
         showBanner('✅ Tulokset tallennettu', 'success');
-        // auto create new round
         setTimeout(()=>{ window.autoCreateRound(); }, 800);
       } catch(e){
         console.error(e); showBanner('Tallennus epäonnistui','error');
@@ -113,7 +115,6 @@
 
     document.addEventListener('DOMContentLoaded', ()=>{
       if(window.startLiveSync) window.startLiveSync();
-      // render immediate if local store present
       if(window.store?.rounds?.length) window.updateRoundsUI(window.store.rounds);
     });
   </script>
@@ -121,7 +122,7 @@
 <body>
   <div id="banner" class="banner"></div>
   <div class="container card">
-    <h1>Kierrokset</h1>
+    <h1>Käynnissä oleva kierros</h1>
     <div id="roundsList" style="margin-bottom:18px"></div>
     <input type="hidden" id="currentRoundId" value="">
     <div id="byesList" class="small" style="margin-bottom:8px"></div>
