@@ -112,9 +112,20 @@ export function startLiveSync(){
 /* ---------- CRUD helperit ---------- */
 export async function addPlayerToDB(player){
   // player: { id?, name, permanentBreak?, wins?, totalPoints?, games?, byeCount? }
+  if (!player.name || !player.name.trim()) {
+    showBanner('Nimi ei kelpaa','error');
+    throw new Error('Tyhjä nimi');
+  }
   const id = player.id || makeId();
-  await setDoc(doc(db,'players', id), { name: player.name, permanentBreak: !!player.permanentBreak,
-    wins: player.wins||0, totalPoints: player.totalPoints||0, games: player.games||0, byeCount: player.byeCount||0 }, { merge:true });
+  console.log("Lisätään pelaaja Firestoreen:", id, player.name);
+  await setDoc(doc(db,'players', id), { 
+    name: player.name.trim(), 
+    permanentBreak: !!player.permanentBreak,
+    wins: player.wins||0, 
+    totalPoints: player.totalPoints||0, 
+    games: player.games||0, 
+    byeCount: player.byeCount||0 
+  }, { merge:true });
   return id;
 }
 export async function updatePlayerInDB(id, data){
@@ -209,6 +220,7 @@ function makeAmericanoPairs(playersList, pastPartners){
   return pairs;
 }
 
+/* ---------- autoCreateRound etc. ---------- */
 export function autoCreateRound(){
   // create round from current store.players and store.rounds
   const settings = store.settings || { courts:3, winPoints:11 };
