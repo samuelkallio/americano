@@ -46,17 +46,25 @@
       } catch(e){ showBanner('Poisto epäonnistui','error'); }
     }
 
-    async function addPlayer(){
-      const name = prompt('Anna pelaajan nimi:');
-      if(!name || !name.trim()) {
-        showBanner('Anna kelvollinen nimi','error');
-        return;
+    // UUSI: Monirivinen pelaajien lisäys
+    async function addPlayersBulk(){
+      const area = document.getElementById('bulkPlayerArea');
+      const namesRaw = area.value.trim();
+      if(!namesRaw) return showBanner('Anna pelaajien nimet','error');
+      const names = namesRaw.split('\n').map(x => x.trim()).filter(x => !!x);
+      if(!names.length) return showBanner('Anna pelaajien nimet','error');
+      let added = 0, errors = 0;
+      for(const name of names){
+        try {
+          await window.addPlayerToDB({ name, wins:0, totalPoints:0, games:0, byeCount:0, permanentBreak:false });
+          added++;
+        } catch(e) {
+          errors++;
+        }
       }
-      try {
-        await window.addPlayerToDB({ name: name.trim(), wins:0, totalPoints:0, games:0, byeCount:0, permanentBreak:false });
-        showBanner('Pelaaja lisätty','success');
-        // UI päivittyy automaattisesti onSnapshotin kautta
-      } catch(e){ showBanner('Virhe lisäämisessä','error'); console.error(e); }
+      if(added) showBanner(`Lisättiin ${added} pelaajaa!`, 'success');
+      if(errors) showBanner(`${errors} pelaajaa ei voitu lisätä`, 'error');
+      area.value = "";
     }
 
     async function clearAll(){
@@ -83,13 +91,27 @@
   <div class="container card">
     <h1>Pelaajat</h1>
     <table id="playerTable"></table>
-    <div style="margin-top:18px;">
-      <button onclick="addPlayer()">➕ Lisää pelaaja</button>
-      <button onclick="clearAll()">🗑️ Tyhjennä kaikki</button>
+
+    <div style="margin-top:24px;max-width:400px;margin-left:auto;margin-right:auto;">
+      <label for="bulkPlayerArea"><b>Lisää pelaajia rivittäin (yksi nimi/rivi):</b></label>
+      <textarea id="bulkPlayerArea" rows="5" style="width:100%;margin-top:6px;margin-bottom:8px;resize:vertical"></textarea>
+      <div>
+        <button onclick="addPlayersBulk()">➕ Lisää kaikki nimet</button>
+        <button onclick="clearAll()">🗑️ Tyhjennä kaikki</button>
+      </div>
+    </div>
+    <div style="margin-top:24px;text-align:center;">
       <button onclick="location.href='index.html'">Etusivu</button>
       <button onclick="location.href='rounds.html'">🎾 Kierros</button>
       <button onclick="location.href='results.html'">📜 Tulokset</button>
+      <button onclick="location.href='players.html'" class="active">👥</button>
     </div>
   </div>
+  <footer>
+    <button onclick="location.href='index.html'">🏠</button>
+    <button onclick="location.href='players.html'" class="active">👥</button>
+    <button onclick="location.href='rounds.html'">🎾</button>
+    <button onclick="location.href='results.html'">📜</button>
+  </footer>
 </body>
 </html>
