@@ -7,86 +7,126 @@
   <link rel="stylesheet" href="style.css" />
   <script type="module" src="common.js"></script>
   <script>
-    // Nykyinen kierros
+    // current active round (object from store.rounds)
     let currentRound = null;
+    // track previous players length to detect fresh name list
+    let prevPlayersCount = 0;
 
-    // Näytä käynnissä oleva kierros (kaikki kentät, algoritmin peliparit, suurimmasta kenttä-numerosta alaspäin)
-    async function renderActiveRound() {
-      const players = window.store?.players || [];
+    // Helper: find "active" round from rounds array
+    function findActiveRound(rounds) {
+      if(!rounds || !rounds.length) return null;
+      // prefer newest (index 0 from Firestore ordering) that has all scores empty/zero
+      for(const r of rounds) {
+        if(!r.courts || r.courts.length === 0) continue;
+        const allEmpty = r.courts.every(c =>
+          (c.scoreHome == null || c.scoreHome === 0) &&
+          (c.scoreAway == null || c.scoreAway === 0)
+        );
+        if(allEmpty) return r;
+      }
+      // fallback: return newest
+      return rounds[0];
+    }
+
+    // Render active/current round to table
+    function renderCurrentRound() {
       const rounds = window.store?.rounds || [];
+      const players = window.store?.players || [];
+      const settings = window.store?.settings || { winPoints: 11 };
 
-      // Jos pelaajia ei ole, näytä ohje
-      if (!players.length) {
+      // if no players, show message
+      if(!players || players.length === 0) {
         document.getElementById('byesList').innerHTML = '';
-        document.getElementById('roundTable').innerHTML = '<div class="small">Lisää pelaajia, jotta voit aloittaa kierroksen.</div>';
+        document.getElementById('roundTable').innerHTML = '<div class="small">Lisää pelaajia aloittaaksesi kierroksen.</div>';
         currentRound = null;
         return;
       }
 
-      // Löydä käynnissä oleva kierros: sellainen, jossa kaikki scoreHome ja scoreAway ovat 0/null
-      currentRound = rounds.find(r =>
-        r.courts && r.courts.every(c =>
-          (c.scoreHome == null || c.scoreHome === 0) &&
-          (c.scoreAway == null || c.scoreAway === 0)
-        )
-      );
-
-      // Jos ei löydy ja pelaajia on, luo uusi kierros automaattisesti
-      if (!currentRound && window.autoCreateRound) {
-        await window.autoCreateRound();
-        // odota hetki että live sync tuo uuden kierroksen Firestoresta
-        setTimeout(renderActiveRound, 600);
-        // Näytä odotusviesti
-        document.getElementById('roundTable').innerHTML = '<div class="small">Luodaan uutta kierrosta...</div>';
+      currentRound = findActiveRound(rounds);
+      // If no round and we have players, create one automatically
+      if(!currentRound) {
+        // show spinner/message while creating
         document.getElementById('byesList').innerHTML = '';
+        document.getElementById('roundTable').innerHTML = '<div class="small">Luodaan uutta kierrosta…</div>';
+        // attempt to create a new round
+        if(window.autoCreateRound) {
+          window.autoCreateRound()
+            .then(() => {
+              // small delay to let live-sync update store
+              setTimeout(renderCurrentRound, 600);
+            })
+            .catch(e => {
+              console.error('autoCreateRound failed', e);
+              document.getElementById('roundTable').innerHTML = '<div class="small">Uuden kierroksen luonti epäonnistui.</div>';
+            });
+        }
         return;
       }
 
-      // Piirrä kentät
+      // Build table: sort courts by courtNumber desc (largest first)
       const tbl = document.getElementById('roundTable');
       const byesEl = document.getElementById('byesList');
       let html = '<tr><th>Kenttä</th><th>Koti</th><th>Koti pisteet</th><th>Vieras</th><th>Vieras pisteet</th></tr>';
-      (currentRound.courts || []).slice().sort((a,b)=>b.courtNumber-a.courtNumber).forEach(c => {
-        const homeNames = (c.home||[]).map(getNameById).join(' & ');
-        const awayNames = (c.away||[]).map(getNameById).join(' & ');
+      const sorted = (currentRound.courts || []).slice().sort((a,b) => b.courtNumber - a.courtNumber);
+      for(const c of sorted) {
+        const homeNames = (c.home||[]).map(id => getNameById(id)).join(' & ');
+        const awayNames = (c.away||[]).map(id => getNameById(id)).join(' & ');
+        const maxVal = settings.winPoints || 11;
+        const svalH = (c.scoreHome != null) ? c.scoreHome : 0;
+        const svalA = (c.scoreAway != null) ? c.scoreAway : 0;
         html += `<tr>
           <td><strong>K${c.courtNumber}</strong></td>
-          <td>${homeNames}</td>
-          <td><input type="number" id="sH${c.courtNumber}" min="0" max="${window.store?.settings?.winPoints||11}" value="${c.scoreHome||0}" style="width:70px"></td>
-          <td>${awayNames}</td>
-          <td><input type="number" id="sA${c.courtNumber}" min="0" max="${window.store?.settings?.winPoints||11}" value="${c.scoreAway||0}" style="width:70px"></td>
+          <td class="player-cell">${escapeHtml(homeNames)}</td>
+          <td><input class="score-input" type="number" id="sH${c.courtNumber}" min="0" max="${maxVal}" value="${svalH}" /></td>
+          <td class="player-cell">${escapeHtml(awayNames)}</td>
+          <td><input class="score-input" type="number" id="sA${c.courtNumber}" min="0" max="${maxVal}" value="${svalA}" /></td>
         </tr>`;
-      });
+      }
       tbl.innerHTML = html;
-      const byes = (currentRound.byes||[]).map(getNameById);
-      byesEl.innerHTML = `<strong>Tauolla:</strong> ${byes.length ? byes.join(', ') : 'Ei ketään'}`;
+
+      const byes = (currentRound.byes || []).map(id => getNameById(id));
+      byesEl.innerHTML = `<strong>Tauolla:</strong> ${byes.length ? escapeHtml(byes.join(', ')) : 'Ei ketään'}`;
     }
 
+    // small helper to escape text inserted into HTML
+    function escapeHtml(s){
+      if(!s) return '';
+      return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+    }
+
+    // get player name for id using store
     function getNameById(id) {
-      const p = (window.store?.players||[]).find(x=>x.id===id);
+      const p = (window.store?.players || []).find(x => x.id === id);
       return p ? p.name : '?';
     }
 
+    // score validation: one score exactly wp and greater than other
     function validateScore(sH, sA, wp) {
       if(Number.isNaN(sH) || Number.isNaN(sA)) return false;
-      if(sH < 0 || sA < 0 || sH > wp || sA > wp) return false;
+      if(sH < 0 || sA < 0) return false;
+      if(sH > wp || sA > wp) return false;
       if((sH === wp && sH > sA) || (sA === wp && sA > sH)) return true;
       return false;
     }
 
-    // Tallennus: tallentaa tulokset ja luo uuden kierroksen, jos edellinen valmis
+    // save results: validates and writes currentRound to Firestore
     async function saveResults() {
-      const players = window.store?.players || [];
-      if (!players.length) {
-        showBanner('Lisää pelaajia ensin','error');
+      if(!currentRound) {
+        // if there are players but no round, create one then show
+        if(window.autoCreateRound) {
+          try {
+            await window.autoCreateRound();
+            setTimeout(renderCurrentRound, 600);
+          } catch(e) {
+            console.error(e);
+            showBanner('Uuden kierroksen luonti epäonnistui','error');
+          }
+        } else {
+          showBanner('Ei kierrosta tallennettavaksi','error');
+        }
         return;
       }
-      // Jos ei kierrosta, luodaan uusi
-      if (!currentRound && window.autoCreateRound) {
-        await window.autoCreateRound();
-        setTimeout(renderActiveRound, 600);
-        return;
-      }
+
       const wp = window.store?.settings?.winPoints || 11;
       for(const c of currentRound.courts || []) {
         const sH = Number(document.getElementById(`sH${c.courtNumber}`).value || 0);
@@ -96,43 +136,118 @@
           return;
         }
       }
-      // Päivitä tulokset
+
+      // Apply scores to the object
       for(const c of currentRound.courts || []) {
         c.scoreHome = Number(document.getElementById(`sH${c.courtNumber}`).value || 0);
         c.scoreAway = Number(document.getElementById(`sA${c.courtNumber}`).value || 0);
       }
+
       try {
         await window.saveRoundToDB(currentRound);
         await window.recomputeAndSavePlayers();
         showBanner('✅ Tulokset tallennettu', 'success');
+        // after saving, reset currentRound so next render will create/select a new one
         currentRound = null;
-        // Luo uusi kierros automaattisesti
-        setTimeout(renderActiveRound, 800);
+        // small delay to let live sync update
+        setTimeout(renderCurrentRound, 700);
       } catch(e) {
-        console.error(e); showBanner('Tallennus epäonnistui','error');
+        console.error(e);
+        showBanner('Tallennus epäonnistui','error');
       }
     }
 
-    // UI-päivitykset
-    window.updatePlayersUI = function(players) { renderActiveRound(); };
-    window.updateRoundsUI = function(rounds) { renderActiveRound(); };
+    // Manual create button handler
+    async function createNewRoundManually() {
+      const players = window.store?.players || [];
+      if(!players || players.length === 0) {
+        showBanner('Lisää pelaajia ensin','error');
+        return;
+      }
+      if(!window.autoCreateRound) {
+        showBanner('autoCreateRound ei käytettävissä','error');
+        return;
+      }
+      try {
+        await window.autoCreateRound();
+        showBanner('Uusi kierros luotu','success');
+        setTimeout(renderCurrentRound, 600);
+      } catch(e) {
+        console.error(e);
+        showBanner('Kierroksen luonti epäonnistui','error');
+      }
+    }
 
-    document.addEventListener('DOMContentLoaded', ()=>{
+    // Clear rounds button (optional helper)
+    async function clearAllRounds() {
+      if(!confirm('Poistetaanko kaikki kierrokset pilvestä?')) return;
+      const rounds = window.store?.rounds || [];
+      try {
+        for(const r of rounds) {
+          if(r.id) await window.deleteRoundFromDB(r.id);
+        }
+        showBanner('Kierrokset poistettu','success');
+      } catch(e) {
+        console.error(e);
+        showBanner('Kierrosten poisto epäonnistui','error');
+      }
+    }
+
+    // Called by common.js on updates (live sync). We override these to update UI.
+    window.updatePlayersUI = function(players) {
+      // detect fresh name-list creation: from 0 to >0 -> initialize new round
+      const newCount = (players || []).length;
+      if(prevPlayersCount === 0 && newCount > 0) {
+        // create initial round
+        if(window.autoCreateRound) {
+          window.autoCreateRound().then(()=> {
+            setTimeout(renderCurrentRound, 600);
+          }).catch(e => console.error('autoCreateRound failed', e));
+        }
+      }
+      prevPlayersCount = newCount;
+      renderCurrentRound();
+    };
+
+    window.updateRoundsUI = function(rounds) {
+      // simply re-render current round when rounds update
+      renderCurrentRound();
+    };
+
+    // initial startup
+    document.addEventListener('DOMContentLoaded', () => {
       if(window.startLiveSync) window.startLiveSync();
-      renderActiveRound();
+      // initial render after a short delay to allow loadLocal to populate if used
+      setTimeout(() => {
+        prevPlayersCount = (window.store?.players || []).length;
+        renderCurrentRound();
+      }, 300);
     });
   </script>
+
+  <style>
+    /* small page-specific styles, uses style.css for base */
+    .player-cell { padding-right: 8px; }
+    .score-input { width: 72px; padding:4px; }
+    .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  </style>
 </head>
 <body>
   <div id="banner" class="banner"></div>
+
   <div class="container card">
     <h1>Käynnissä oleva kierros</h1>
+
+    <div class="controls">
+      <button onclick="createNewRoundManually()">➕ Luo uusi kierros</button>
+      <button onclick="saveResults()">💾 Tallenna tulokset</button>
+      <button onclick="clearAllRounds()">🗑️ Poista kaikki kierrokset</button>
+    </div>
+
     <div id="byesList" class="small" style="margin-bottom:8px"></div>
     <table id="roundTable"></table>
-    <div style="text-align:center; margin-top:8px;">
-      <button onclick="saveResults()">💾 Tallenna tulokset</button>
-    </div>
   </div>
+
   <footer>
     <button onclick="location.href='index.html'">⚙️</button>
     <button onclick="location.href='players.html'">👥</button>
