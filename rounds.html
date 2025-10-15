@@ -11,8 +11,18 @@
     let currentRound = null;
 
     // Näytä käynnissä oleva kierros (kaikki kentät, algoritmin peliparit, suurimmasta kenttä-numerosta alaspäin)
-    function renderActiveRound() {
+    async function renderActiveRound() {
+      const players = window.store?.players || [];
       const rounds = window.store?.rounds || [];
+
+      // Jos pelaajia ei ole, näytä ohje
+      if (!players.length) {
+        document.getElementById('byesList').innerHTML = '';
+        document.getElementById('roundTable').innerHTML = '<div class="small">Lisää pelaajia, jotta voit aloittaa kierroksen.</div>';
+        currentRound = null;
+        return;
+      }
+
       // Löydä käynnissä oleva kierros: sellainen, jossa kaikki scoreHome ja scoreAway ovat 0/null
       currentRound = rounds.find(r =>
         r.courts && r.courts.every(c =>
@@ -20,17 +30,15 @@
           (c.scoreAway == null || c.scoreAway === 0)
         )
       );
-      // Jos ei löydy, luo uusi kierros automaattisesti ja päivitä näkymä
-      if (!currentRound) {
-        if (window.autoCreateRound) {
-          window.autoCreateRound().then(() => {
-            // odota hetki että live sync tuo uuden kierroksen Firestoresta
-            setTimeout(renderActiveRound, 600);
-          });
-          // Näytä odotusviesti
-          document.getElementById('roundTable').innerHTML = '<div class="small">Luodaan uutta kierrosta...</div>';
-          document.getElementById('byesList').innerHTML = '';
-        }
+
+      // Jos ei löydy ja pelaajia on, luo uusi kierros automaattisesti
+      if (!currentRound && window.autoCreateRound) {
+        await window.autoCreateRound();
+        // odota hetki että live sync tuo uuden kierroksen Firestoresta
+        setTimeout(renderActiveRound, 600);
+        // Näytä odotusviesti
+        document.getElementById('roundTable').innerHTML = '<div class="small">Luodaan uutta kierrosta...</div>';
+        document.getElementById('byesList').innerHTML = '';
         return;
       }
 
@@ -68,12 +76,15 @@
 
     // Tallennus: tallentaa tulokset ja luo uuden kierroksen, jos edellinen valmis
     async function saveResults() {
+      const players = window.store?.players || [];
+      if (!players.length) {
+        showBanner('Lisää pelaajia ensin','error');
+        return;
+      }
       // Jos ei kierrosta, luodaan uusi
-      if (!currentRound) {
-        if (window.autoCreateRound) {
-          await window.autoCreateRound();
-          setTimeout(renderActiveRound, 600);
-        }
+      if (!currentRound && window.autoCreateRound) {
+        await window.autoCreateRound();
+        setTimeout(renderActiveRound, 600);
         return;
       }
       const wp = window.store?.settings?.winPoints || 11;
