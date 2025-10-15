@@ -1,6 +1,7 @@
 /* common.js (module)
-   Käyttää Firebase v12 moduuleja (CDN). Tämä tiedosto alustaa Firebase,
-   kuuntelee reaaliaikaisesti Firestore-kokoelmia ja tarjoaa CRUD + pairing -funktiot.
+   Käyttää Firebase v12 moduuleja (CDN).
+   Tämä tiedosto alustaa Firebase, kuuntelee reaaliaikaisesti Firestore-kokoelmia
+   ja tarjoaa CRUD + pairing -funktiot.
 */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
@@ -32,7 +33,7 @@ const firebaseConfig = {
 /* ---------- Initialize Firebase & Firestore ---------- */
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-window.db = db; // helpperiksi muille skripteille
+window.db = db; // apuna muille skripteille
 
 /* ---------- Local store (peilataan Firestoreen) ---------- */
 const store = {
@@ -152,9 +153,16 @@ export async function saveSettingsToDB(settings){
 export async function recomputeAndSavePlayers(){
   // recompute from store.rounds onto store.players in-memory, then write each player doc.
   // We compute wins, totalPoints, games, byeCount
-  // Start fresh
+  // Start fresh (do NOT reuse stored byeCount; compute solely from rounds)
   const stats = {};
-  store.players.forEach(p => stats[p.id] = { wins:0, totalPoints:0, games:0, byeCount: p.byeCount||0, permanentBreak: !!p.permanentBreak, name: p.name });
+  store.players.forEach(p => stats[p.id] = { 
+    wins: 0, 
+    totalPoints: 0, 
+    games: 0, 
+    byeCount: 0, 
+    permanentBreak: !!p.permanentBreak, 
+    name: p.name 
+  });
 
   (store.rounds || []).forEach(r=>{
     (r.byes || []).forEach(bid=>{
@@ -220,7 +228,7 @@ function makeAmericanoPairs(playersList, pastPartners){
   return pairs;
 }
 
-/* ---------- autoCreateRound etc. ---------- */
+/* ---------- autoCreateRound (create round from store.players and store.rounds) ---------- */
 export function autoCreateRound(){
   // create round from current store.players and store.rounds
   const settings = store.settings || { courts:3, winPoints:11 };
